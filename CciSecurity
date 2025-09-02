@@ -1,0 +1,159 @@
+package com.adp.autopay.cci.security;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import javax.sql.DataSource;
+import java.sql.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class CciSecurity {
+    
+    private final DataSource dataSource;
+
+    public CciSecurityBean login(String userId, String password, boolean useSingleDataSource,
+                                String dbName, String dbSchema, boolean trace) throws CciLoginException {
+        
+        log.info("Attempting to log in user '{}'", userId);
+
+        String securityData = "";
+        int returnCode = 3;
+        String errorMsg1 = "";
+        String errorMsg2 = "";
+        String errorMsg3 = "";
+        String errorMsg4 = "";
+
+        int retryCount = 0;
+        boolean error = true;
+
+        do {
+            try (Connection connection = dataSource.getConnection();
+                 CallableStatement callableStatement = createCallableStatement(
+                     connection, userId, password, useSingleDataSource, dbName, dbSchema)) {
+                
+                log.info("Successfully connected to database");
+                
+                callableStatement.execute();
+                
+                securityData = callableStatement.getString(3);
+                returnCode = callableStatement.getInt(4);
+                errorMsg1 = callableStatement.getString(5);
+                errorMsg2 = callableStatement.getString(6);
+                errorMsg3 = callableStatement.getString(7);
+                errorMsg4 = callableStatement.getString(8);
+                
+                error = false;
+                
+            } catch (SQLRecoverableException | SQLNonTransientConnectionException e) {
+                handleRetryableException(e, ++retryCount, "PLSFAUTH");
+            } catch (SQLException e) {
+                throw new CciLoginException(CciLoginException.CLE_DB_ERROR,
+                        "Call to stored procedure PLSFAUTH failed", e.getMessage(), "", "", "");
+            }
+        } while (error && retryCount < 3);
+
+        log.info("Data returned from PLSFAUTH follows:");
+        log.info("SecurityData = {}", securityData);
+        log.info("ReturnCode = {}", returnCode);
+        log.info("ErrorMsg1 = {}", errorMsg1);
+        log.info("ErrorMsg2 = {}", errorMsg2);
+        log.info("ErrorMsg3 = {}", errorMsg3);
+        log.info("ErrorMsg4 = {}", errorMsg4);
+
+        return processLoginResponse(userId, securityData, returnCode, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+    }
+
+    private CallableStatement createCallableStatement(Connection connection, String userId, String password,
+                                                     boolean useSingleDataSource, String dbName, 
+                                                     String dbSchema) throws SQLException {
+        String safeDbName = sanitizeAlphaNum(dbName, 16);
+        String safeDbSchema = sanitizeAlphaNum(dbSchema, 16);
+        
+        String sql = useSingleDataSource ? 
+            String.format("Call %s.%s.PLSFAUTH(?,?,?,?,?,?,?)", safeDbName, safeDbSchema) :
+            String.format("Call %s.PLSFAUTH(?,?,?,?,?,?,?)", safeDbSchema);
+        
+        log.info("SQL = {}", sql);
+        
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        callableStatement.setString(1, truncate(userId, 3));
+        callableStatement.setString(2, truncate(password, 10));
+        callableStatement.registerOutParameter(3, Types.CHAR);
+        callableStatement.registerOutParameter(4, Types.INTEGER);
+        callableStatement.registerOutParameter(5, Types.CHAR);
+        callableStatement.registerOutParameter(6, Types.CHAR);
+        callableStatement.registerOutParameter(7, Types.CHAR);
+        callableStatement.registerOutParameter(8, Types.CHAR);
+        
+        return callableStatement;
+    }
+
+    private void handleRetryableException(SQLException e, int retryCount, String procedureName) 
+            throws CciLoginException {
+        if (retryCount > 2) {
+            throw new CciLoginException(CciLoginException.CLE_DB_ERROR,
+                    "Stale Connection Exception calling " + procedureName, 
+                    e.getMessage(), "", "", "");
+        }
+    }
+
+    private CciSecurityBean processLoginResponse(String userId, String securityData, int returnCode,
+                                                String errorMsg1, String errorMsg2, 
+                                                String errorMsg3, String errorMsg4) throws CciLoginException {
+        CciSecurityBean cciSecurityBean = new CciSecurityBean(userId);
+        String errorMessage;
+
+        switch (returnCode) {
+            case 0: // Success
+                String rfcAuthFlag = "N";
+                if (securityData != null && securityData.length() > 0) {
+                    rfcAuthFlag = securityData.substring(3, 4);
+                }
+                
+                if (rfcAuthFlag.equalsIgnoreCase("Y")) {
+                    log.info("RFC value for update access={}", rfcAuthFlag);
+                    cciSecurityBean.setAuthLsfrs(CciSecurityBean.CCI_AUTH_UPDATE);
+                } else {
+                    log.info("RFC value for inquiry only access={}", rfcAuthFlag);
+                    cciSecurityBean.setAuthLsfrs(CciSecurityBean.CCI_AUTH_INQUIRY);
+                }
+                break;
+                
+            case 1: // Database Error
+                throw new CciLoginException(CciLoginException.CLE_DB_ERROR,
+                        "Database Error in PLSFAUTH", errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+                        
+            case 2: // Authentication Failed
+                errorMessage = "User ID and/or Password invalid";
+                log.info(errorMessage);
+                throw new CciLoginException(CciLoginException.CLE_NOT_AUTHORIZED, 
+                        errorMessage, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+                        
+            default:
+                errorMessage = String.format("Return code '%d' from PLSFAUTH", returnCode);
+                throw new CciLoginException(CciLoginException.CLE_DB_ERROR, 
+                        errorMessage, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+        }
+        
+        return cciSecurityBean;
+    }
+
+    private String truncate(String input, int length) {
+        return input.length() > length ? input.substring(0, length) : input;
+    }
+
+    private String sanitizeAlphaNum(String input, int maxLen) {
+        if (input == null) return null;
+        String sanitized = input.replaceAll("[^A-Za-z0-9_]", "");
+        return sanitized.length() > maxLen ? sanitized.substring(0, maxLen) : sanitized;
+    }
+
+    private String getDateTime() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+}
