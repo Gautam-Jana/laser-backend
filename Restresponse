@@ -1,0 +1,26 @@
+package com.adp.autopay.cci.security;
+
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.Serializable;
+
+public class RestResponse implements Serializable {
+    private static final long serialVersionUID = 6579320678998511489L;
+    
+    private int httpResponseCode;
+    private String httpResponseBody;
+    private String urlString;
+    private ObjectNode ojoHttpResponseBody;
+
+    // Getters and Setters
+    public int getHttpResponseCode() { return httpResponseCode; }
+    public void setHttpResponseCode(int httpResponseCode) { this.httpResponseCode = httpResponseCode; }
+    
+    public String getHttpResponseBody() { return httpResponseBody; }
+    public void setHttpResponseBody(String httpResponseBody) { this.httpResponseBody = httpResponseBody; }
+    
+    public String getUrlString() { return urlString; }
+    public void setUrlString(String urlString) { this.urlString = urlString; }
+    
+    public ObjectNode getOjoHttpResponseBody() { return ojoHttpResponseBody; }
+    public void setOjoHttpResponseBody(ObjectNode ojoHttpResponseBody) { this.ojoHttpResponseBody = ojoHttpResponseBody; }
+}
