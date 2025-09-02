@@ -1,0 +1,142 @@
+package com.adp.autopay.cci.security;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import javax.sql.DataSource;
+import java.sql.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class CciRfc {
+    
+    private final DataSource dataSource;
+
+    public CciRfcBean readRFC(String projectId, boolean useSingleDataSource, 
+                             String dbName, String dbSchema, boolean trace) throws CciLoginException {
+        
+        log.info("Attempting to read RFC for project {}", projectId);
+
+        String rfcRow = "";
+        int returnCode = 3;
+        String errorMsg1 = "";
+        String errorMsg2 = "";
+        String errorMsg3 = "";
+        String errorMsg4 = "";
+
+        int retryCount = 0;
+        boolean error = true;
+
+        do {
+            try (Connection connection = dataSource.getConnection();
+                 CallableStatement callableStatement = createCallableStatement(
+                     connection, projectId, useSingleDataSource, dbName, dbSchema)) {
+                
+                log.info("Successfully connected to database");
+                
+                callableStatement.execute();
+                
+                rfcRow = callableStatement.getString(2);
+                returnCode = callableStatement.getInt(3);
+                errorMsg1 = callableStatement.getString(4);
+                errorMsg2 = callableStatement.getString(5);
+                errorMsg3 = callableStatement.getString(6);
+                errorMsg4 = callableStatement.getString(7);
+                
+                error = false;
+                
+            } catch (SQLRecoverableException | SQLNonTransientConnectionException e) {
+                handleRetryableException(e, ++retryCount, "PXXXJRFC");
+            } catch (SQLException e) {
+                throw new CciLoginException(CciLoginException.CLE_DB_ERROR,
+                        "Call to stored procedure PXXXJRFC failed", e.getMessage(), "", "", "");
+            }
+        } while (error && retryCount < 3);
+
+        logDatabaseResponse(rfcRow, returnCode, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+        return processRfcResponse(projectId, rfcRow, returnCode, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+    }
+
+    private CallableStatement createCallableStatement(Connection connection, String projectId, 
+                                                     boolean useSingleDataSource, String dbName, 
+                                                     String dbSchema) throws SQLException {
+        String sql = useSingleDataSource ? 
+            String.format("Call %s.%s.PXXXJRFC(?,?,?,?,?,?)", dbName, dbSchema) :
+            String.format("Call %s.PXXXJRFC(?,?,?,?,?,?)", dbSchema);
+        
+        log.info("SQL = {}", sql);
+        
+        CallableStatement callableStatement = connection.prepareCall(sql);
+        callableStatement.setString(1, truncate(projectId, 6) + " ");
+        callableStatement.registerOutParameter(2, Types.CHAR);
+        callableStatement.registerOutParameter(3, Types.INTEGER);
+        callableStatement.registerOutParameter(4, Types.CHAR);
+        callableStatement.registerOutParameter(5, Types.CHAR);
+        callableStatement.registerOutParameter(6, Types.CHAR);
+        callableStatement.registerOutParameter(7, Types.CHAR);
+        
+        return callableStatement;
+    }
+
+    private void handleRetryableException(SQLException e, int retryCount, String procedureName) 
+            throws CciLoginException {
+        if (retryCount > 2) {
+            throw new CciLoginException(CciLoginException.CLE_DB_ERROR,
+                    "Stale Connection Exception calling " + procedureName, 
+                    e.getMessage(), "", "", "");
+        }
+    }
+
+    private void logDatabaseResponse(String rfcRow, int returnCode, String... errorMsgs) {
+        log.info("Data returned from PXXXJRFC follows:");
+        log.info("RfcRow = {}", rfcRow);
+        log.info("ReturnCode = {}", returnCode);
+        for (int i = 0; i < errorMsgs.length; i++) {
+            log.info("ErrorMsg{} = {}", i + 1, errorMsgs[i]);
+        }
+    }
+
+    private CciRfcBean processRfcResponse(String projectId, String rfcRow, int returnCode,
+                                         String errorMsg1, String errorMsg2, 
+                                         String errorMsg3, String errorMsg4) throws CciLoginException {
+        CciRfcBean cciRfcBean = new CciRfcBean(projectId);
+
+        switch (returnCode) {
+            case 0: // Success
+                if (rfcRow != null && rfcRow.length() > 51) {
+                    cciRfcBean.setFieldDataText(rfcRow.substring(9, 17).trim());
+                    cciRfcBean.setRegionControlFlag(rfcRow.substring(51, 52));
+                }
+                break;
+                
+            case 1: // Database Error
+                throw new CciLoginException(CciLoginException.CLE_DB_ERROR,
+                        "Database Error in PXXXJRFC", errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+                        
+            case 2: // Record not found
+                String errorMessage = String.format("Project ID '%s' not found on RFC table", projectId);
+                log.error(errorMessage);
+                throw new CciLoginException(CciLoginException.CLE_RFC_RECORD_NOT_FOUND, 
+                        errorMessage, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+                        
+            default:
+                errorMessage = String.format("Return code '%d' from PXXXJRFC", returnCode);
+                throw new CciLoginException(CciLoginException.CLE_DB_ERROR, 
+                        errorMessage, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+        }
+        
+        return cciRfcBean;
+    }
+
+    private String truncate(String input, int length) {
+        return input.length() > length ? input.substring(0, length) : input;
+    }
+
+    private String getDateTime() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+}
