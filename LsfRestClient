@@ -1,0 +1,74 @@
+package com.adp.autopay.cci.security;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.SocketTimeoutException;
+import java.net.URL;
+import java.util.Base64;
+
+@Slf4j
+@Service
+public class LsfRestClient {
+
+    public RestResponse lsfRestClientGet(String urlString, String userId, String password, 
+                                        int connectionTimeout) throws CciLoginException {
+        
+        RestResponse restResponse = new RestResponse();
+        restResponse.setUrlString(urlString);
+        
+        try {
+            URL url = new URL(urlString);
+            HttpURLConnection httpURLConnection = (HttpURLConnection) url.openConnection();
+            httpURLConnection.setRequestMethod("GET");
+            httpURLConnection.setRequestProperty("Accept", "application/json");
+            
+            // Add HTTP Basic authentication
+            if (userId != null && !userId.isEmpty() && password != null && !password.isEmpty()) {
+                String authString = userId + ":" + password;
+                byte[] authEncBytes = Base64.getEncoder().encode(authString.getBytes());
+                String authStringEnc = new String(authEncBytes);
+                httpURLConnection.setRequestProperty("Authorization", "Basic " + authStringEnc);
+            }
+            
+            httpURLConnection.setConnectTimeout(connectionTimeout);
+            int httpResponseCode = httpURLConnection.getResponseCode();
+            restResponse.setHttpResponseCode(httpResponseCode);
+
+            try (InputStream inputStream = httpResponseCode < 400 ? 
+                 httpURLConnection.getInputStream() : httpURLConnection.getErrorStream();
+                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream))) {
+                
+                StringBuilder stringBuilder = new StringBuilder();
+                String line;
+                while ((line = bufferedReader.readLine()) != null) {
+                    stringBuilder.append(line);
+                }
+                restResponse.setHttpResponseBody(stringBuilder.toString());
+            }
+            
+        } catch (SocketTimeoutException e) {
+            String errorMessage = String.format("lsfRestClientGet: SocketTimeoutException from call to '%s'", urlString);
+            log.error(errorMessage);
+            throw new CciLoginException(CciLoginException.CLE_SOCKET_TIMEOUT_EXCEPTION,
+                    errorMessage, "", "", "", "");
+                    
+        } catch (MalformedURLException e) {
+            String errorMessage = String.format("lsfRestClientGet: MalformedURLException for URL '%s'", urlString);
+            log.error(errorMessage);
+            throw new CciLoginException(CciLoginException.CLE_MALFORMED_URL_EXCEPTION,
+                    errorMessage, "", "", "", "");
+                    
+        } catch (IOException e) {
+            String errorMessage = String.format("lsfRestClientGet: IOException for URL '%s'", urlString);
+            log.error(errorMessage);
+            throw new CciLoginException(CciLoginException.CLE_IO_EXCEPTION,
+                    errorMessage, "", "", "", "");
+        }
+        
+        return restResponse;
+    }
+}
