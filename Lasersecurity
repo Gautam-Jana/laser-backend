@@ -1,0 +1,99 @@
+package com.adp.autopay.cci.security;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class RacfSecurity {
+    
+    private final LsfRestClient lsfRestClient;
+
+    public CciSecurityBean login(String userId, String password, String cicsUrl, 
+                                String ddSchema, int connectTimeout) throws CciLoginException {
+        
+        log.info("Attempting to log in user {}", userId);
+
+        if (cicsUrl == null) {
+            String errorMessage = "CICS URL parameter missing from properties file";
+            log.error(errorMessage);
+            throw new CciLoginException(CciLoginException.CLE_MISSING_PROPERTIES_FILE_PARAMETER, 
+                    errorMessage, "", "", "", "");
+        }
+
+        String urlString = cicsUrl + "/" + ddSchema + "_DTO";
+        log.info("Attempting to authenticate the user {} via {}", userId, urlString);
+
+        RestResponse restResponse = lsfRestClient.lsfRestClientGet(urlString, userId, password, connectTimeout);
+
+        CciSecurityBean cciSecurityBean = new CciSecurityBean(userId);
+        String errorMessage;
+
+        if (restResponse.getHttpResponseCode() == 200) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                ObjectNode responseBody = (ObjectNode) mapper.readTree(restResponse.getHttpResponseBody());
+                restResponse.setOjoHttpResponseBody(responseBody);
+                
+                String profileCode = parseLsfauthCodeProfileCode(responseBody);
+                if (profileCode.equalsIgnoreCase("Y")) {
+                    log.info("RFC value for update access={}", profileCode);
+                    cciSecurityBean.setAuthLsfrs(CciSecurityBean.CCI_AUTH_UPDATE);
+                } else {
+                    log.info("RFC value for inquiry only access={}", profileCode);
+                    cciSecurityBean.setAuthLsfrs(CciSecurityBean.CCI_AUTH_INQUIRY);
+                }
+                
+            } catch (IOException e) {
+                errorMessage = String.format("Malformed JSON returned from call to '%s' JSON returned = '%s'", 
+                                           urlString, restResponse.getHttpResponseBody());
+                log.error(errorMessage);
+                throw new CciLoginException(CciLoginException.CLE_MALFORMED_JSON, 
+                        errorMessage, "", "", "", "");
+            }
+            
+        } else if (restResponse.getHttpResponseCode() == 401 || restResponse.getHttpResponseCode() == 403) {
+            errorMessage = String.format("HTTP %d received from call to '%s' Response Body = '%s'", 
+                                       restResponse.getHttpResponseCode(), restResponse.getUrlString(), 
+                                       restResponse.getHttpResponseBody());
+            log.error(errorMessage);
+            throw new CciLoginException(CciLoginException.CLE_NOT_AUTHORIZED, 
+                    "RACF ID and/or Password Invalid", "", "", "", "");
+                    
+        } else if (restResponse.getHttpResponseCode() == 404) {
+            errorMessage = String.format("HTTP 404 received from call to '%s' Response Body = '%s'", 
+                                       restResponse.getUrlString(), restResponse.getHttpResponseBody());
+            log.error(errorMessage);
+            throw new CciLoginException(CciLoginException.CLE_RACF_ID_NOT_SET_UP_FOR_XPON_ACCESS, 
+                    "RACF ID is not set up for XPON access", "", "", "", "");
+                    
+        } else {
+            errorMessage = String.format("HTTP %d received from call to '%s' Response Body = '%s'", 
+                                       restResponse.getHttpResponseCode(), restResponse.getUrlString(), 
+                                       restResponse.getHttpResponseBody());
+            log.error(errorMessage);
+            throw new CciLoginException(CciLoginException.CLE_UNEXPECTED_HTTP_RESPONSE_CODE, 
+                    errorMessage, "", "", "", "");
+        }
+
+        return cciSecurityBean;
+    }
+
+    private String parseLsfauthCodeProfileCode(ObjectNode httpResponseBody) {
+        try {
+            ObjectNode lsfauthCode = (ObjectNode) httpResponseBody.get("lsfauthCode");
+            String profileCode = lsfauthCode.get("profileCode").asText();
+            
+            return (profileCode != null && !profileCode.isEmpty()) ? profileCode : "";
+        } catch (Exception e) {
+            log.error("Error parsing JSON response", e);
+            return "";
+        }
+    }
+}
