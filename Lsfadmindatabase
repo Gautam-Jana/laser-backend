@@ -1,0 +1,135 @@
+package com.adp.autopay.lsf.admin;
+
+import com.adp.autopay.cci.security.CciLoginException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import javax.sql.DataSource;
+import java.sql.*;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class LsfAdminDatabase {
+    
+    private final DataSource dataSource;
+
+    public void fillReportsBuffer(LsfAdminDataBean dataBean, LsfRow startRow, 
+                                String actionCode, String updateData) throws LsfAdminException {
+        
+        try (Connection connection = dataSource.getConnection()) {
+            String sql = buildSqlQuery(dataBean, actionCode);
+            
+            try (CallableStatement callableStatement = connection.prepareCall(sql)) {
+                setParameters(callableStatement, dataBean, startRow, actionCode, updateData);
+                
+                callableStatement.execute();
+                
+                processResultSet(callableStatement, dataBean, actionCode);
+            }
+            
+        } catch (SQLException e) {
+            log.error("Database error in fillReportsBuffer: {}", e.getMessage());
+            throw new LsfAdminException("Database error", e.getMessage(), "", "", "");
+        }
+    }
+
+    private String buildSqlQuery(LsfAdminDataBean dataBean, String actionCode) {
+        String schema = dataBean.getDbSchema();
+        
+        switch (actionCode) {
+            case "R": // Read
+                return String.format("Call %s.PXXXJRPT(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", schema);
+            case "U": // Update
+                return String.format("Call %s.PXXXJUPD(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", schema);
+            case "C": // Count
+                return String.format("Call %s.PXXXJCNT(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", schema);
+            case "L": // List Print
+                return String.format("Call %s.PXXXJLST(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", schema);
+            default:
+                return String.format("Call %s.PXXXJRPT(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", schema);
+        }
+    }
+
+    private void setParameters(CallableStatement cs, LsfAdminDataBean dataBean, 
+                             LsfRow startRow, String actionCode, String updateData) throws SQLException {
+        // Set common parameters
+        cs.setString(1, dataBean.getSelectionCompany());
+        cs.setString(2, dataBean.getSelectionBatch());
+        cs.setString(3, dataBean.getSelectionReportName());
+        cs.setString(4, dataBean.getSelectionReportId());
+        cs.setString(5, dataBean.getSelectionReportType());
+        cs.setString(6, dataBean.getSelectionReportHold());
+        cs.setString(7, dataBean.getSelectionReportAge());
+        cs.setString(8, dataBean.getSelectionReportFromDate());
+        cs.setString(9, dataBean.getSelectionReportToDate());
+        
+        if ("U".equals(actionCode)) {
+            cs.setString(10, updateData);
+        } else if (startRow != null) {
+            cs.setTimestamp(10, startRow.getReportTimestamp());
+        }
+        
+        // Set output parameters
+        cs.registerOutParameter(11, Types.INTEGER); // Return code
+        cs.registerOutParameter(12, Types.INTEGER); // Total row count
+        cs.registerOutParameter(13, Types.INTEGER); // Current row count
+        // ... register other output parameters
+    }
+
+    private void processResultSet(CallableStatement cs, LsfAdminDataBean dataBean, 
+                                String actionCode) throws SQLException {
+        int returnCode = cs.getInt(11);
+        
+        if (returnCode != 0) {
+            handleErrorResponse(cs, returnCode, actionCode);
+        }
+        
+        if ("R".equals(actionCode) || "U".equals(actionCode)) {
+            try (ResultSet rs = cs.getResultSet()) {
+                processResultSetData(rs, dataBean);
+            }
+        }
+        
+        // Set other output parameters to dataBean
+        dataBean.setTotalRowCount(cs.getInt(12));
+        dataBean.setRowCount(cs.getInt(13));
+    }
+
+    private void processResultSetData(ResultSet rs, LsfAdminDataBean dataBean) throws SQLException {
+        dataBean.clearLsfRows();
+        
+        while (rs.next()) {
+            LsfRow row = new LsfRow();
+            row.setCompanyCode(rs.getString("COMPANY_CODE"));
+            row.setBatchNumber(rs.getString("BATCH_NUMBER"));
+            row.setReportName(rs.getString("REPORT_NAME"));
+            row.setReportId(rs.getString("REPORT_ID"));
+            row.setReportType(rs.getString("REPORT_TYPE"));
+            row.setHold(rs.getBoolean("HOLD_FLAG"));
+            row.setReportTimestamp(rs.getTimestamp("REPORT_TIMESTAMP"));
+            row.setStatus(rs.getString("STATUS"));
+            
+            dataBean.getLsfRows().add(row);
+        }
+    }
+
+    private void handleErrorResponse(CallableStatement cs, int returnCode, String actionCode) 
+            throws SQLException, LsfAdminException {
+        String errorMsg1 = cs.getString(14);
+        String errorMsg2 = cs.getString(15);
+        String errorMsg3 = cs.getString(16);
+        String errorMsg4 = cs.getString(17);
+        
+        String errorMessage = String.format("Stored procedure returned error code %d for action %s", 
+                                          returnCode, actionCode);
+        
+        throw new LsfAdminException(errorMessage, errorMsg1, errorMsg2, errorMsg3, errorMsg4);
+    }
+
+    public void fillReportBuffer(LsfAdminDataBean dataBean, LsfRow startRow, 
+                               String actionCode, String updateData) throws LsfAdminException {
+        fillReportsBuffer(dataBean, startRow, actionCode, updateData);
+    }
+}
