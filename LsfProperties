@@ -1,0 +1,57 @@
+package com.adp.autopay.lsf.admin;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import javax.servlet.http.HttpServletRequest;
+import java.io.InputStream;
+import java.util.Properties;
+
+@Slf4j
+@Service
+public class LsfProperties {
+
+    public void init(HttpServletRequest req, LsfAdminDataBean dataBean) throws LsfAdminException {
+        try {
+            Properties properties = new Properties();
+            
+            // Load properties from classpath
+            try (InputStream input = getClass().getClassLoader().getResourceAsStream("application.properties")) {
+                if (input != null) {
+                    properties.load(input);
+                    setPropertiesToDataBean(properties, dataBean);
+                }
+            }
+            
+            // Load environment-specific properties
+            String env = System.getProperty("app.env", "dev");
+            String envPropertiesFile = "application-" + env + ".properties";
+            
+            try (InputStream envInput = getClass().getClassLoader().getResourceAsStream(envPropertiesFile)) {
+                if (envInput != null) {
+                    properties.load(envInput);
+                    setPropertiesToDataBean(properties, dataBean);
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("Error loading properties: {}", e.getMessage());
+            throw new LsfAdminException("Failed to load properties", e.getMessage(), "", "", "");
+        }
+    }
+
+    private void setPropertiesToDataBean(Properties properties, LsfAdminDataBean dataBean) {
+        dataBean.setCicsUrl(properties.getProperty("cics.url"));
+        dataBean.setConnectionTimeoutString(properties.getProperty("connection.timeout"));
+        dataBean.setXponseRfcOverrideValue(properties.getProperty("xponse.rfc.override"));
+        
+        // Set other properties as needed
+        if (properties.getProperty("connection.timeout") != null) {
+            try {
+                dataBean.setConnectionTimeout(Integer.parseInt(properties.getProperty("connection.timeout")));
+            } catch (NumberFormatException e) {
+                dataBean.setConnectionTimeout(5000); // default
+            }
+        }
+    }
+}
