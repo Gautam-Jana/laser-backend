@@ -1,0 +1,33 @@
+package com.adp.autopay.lsf.admin;
+
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class LsfAdminException extends Exception {
+    private static final long serialVersionUID = 1L;
+    
+    private String errorMessage1;
+    private String errorMessage2;
+    private String errorMessage3;
+    private String errorMessage4;
+
+    public LsfAdminException(String message, String errorMessage1, String errorMessage2, 
+                           String errorMessage3, String errorMessage4) {
+        super(message);
+        this.errorMessage1 = errorMessage1;
+        this.errorMessage2 = errorMessage2;
+        this.errorMessage3 = errorMessage3;
+        this.errorMessage4 = errorMessage4;
+    }
+
+    public LsfAdminException(String message, Throwable cause, String errorMessage1, 
+                           String errorMessage2, String errorMessage3, String errorMessage4) {
+        super(message, cause);
+        this.errorMessage1 = errorMessage1;
+        this.errorMessage2 = errorMessage2;
+        this.errorMessage3 = errorMessage3;
+        this.errorMessage4 = errorMessage4;
+    }
+}
