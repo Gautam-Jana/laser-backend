@@ -1,0 +1,29 @@
+package com.adp.autopay.lsf.admin;
+
+import lombok.Getter;
+import lombok.Setter;
+import java.io.Serializable;
+import java.sql.Timestamp;
+
+@Getter
+@Setter
+public class LsfRow implements Serializable {
+    private static final long serialVersionUID = 1L;
+    
+    private String companyCode;
+    private String batchNumber;
+    private String reportName;
+    private String reportId;
+    private String reportType;
+    private boolean hold;
+    private Timestamp reportTimestamp;
+    private String status;
+    private boolean selectedForDelete;
+    private boolean selectedForPrint;
+    
+    // Additional fields as needed from the original code
+    private String regionCode;
+    private String distributionCode;
+    private String errorCode;
+    private String errorMessage;
+}
