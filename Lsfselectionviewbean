@@ -1,0 +1,35 @@
+package com.adp.autopay.lsf.admin;
+
+import lombok.Getter;
+import lombok.Setter;
+import java.io.Serializable;
+
+@Getter
+@Setter
+public class LsfSelectionViewBean implements Serializable {
+    private static final long serialVersionUID = 5962723260056450252L;
+    
+    private String selectionCompany;
+    private String selectionBatch;
+    private String selectionReportName;
+    private String selectionReportId;
+    private String selectionReportType;
+    private String selectionReportHold;
+    private String selectionReportAge;
+    private String selectionReportFromDate;
+    private String selectionReportToDate;
+    private String selectionReportsPerPage;
+
+    public String getDisplaySelectionCompany() {
+        return substituteSpecialCharacters(selectionCompany);
+    }
+
+    public String getDisplaySelectionReportName() {
+        return substituteSpecialCharacters(selectionReportName);
+    }
+
+    private String substituteSpecialCharacters(String input) {
+        if (input == null) return "";
+        return input.replaceAll("[^a-zA-Z0-9\\s]", "");
+    }
+}
