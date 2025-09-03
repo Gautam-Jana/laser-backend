@@ -1,0 +1,92 @@
+public void redirectToPilotUrl(HttpServletRequest req, HttpServletResponse resp,
+                                   String servletPath, String pathInfo, String rfcVersion) throws IOException {
+
+        StringJoiner sPilotUrl = new StringJoiner("");
+        String sPilotVip;
+
+        if (req.getRequestURL().toString().contains("localhost")) {
+            sPilotVip = "http://" + req.getServerName()
+                    + (req.getRequestURL().toString().contains(".oneadp.com") ? "" : (":" + req.getServerPort()));
+        } else {
+            sPilotVip = "https://" + req.getServerName()
+                    + (req.getRequestURL().toString().contains(".oneadp.com") ? "" : (":" + req.getServerPort()));
+        }
+
+        String pilotUrl = sPilotUrl.add(sPilotVip)
+                .add(req.getContextPath())
+                .add(rfcVersion)
+                .add(servletPath)
+                .add(pathInfo)
+                .toString();
+
+        log.info("**** REDIRECT TO PILOT URL FROM LSF Admin ****");
+        log.info("sPilotUrl: {}", sPilotUrl.toString());
+        log.info("getRequestURL(): {}", req.getRequestURL());
+        log.info("req.getServerPort(): {}", req.getServerPort());
+        log.info("req.getServerName(): {}", req.getServerName());
+        log.info("sPathInfo: {}", pathInfo);
+        log.info("**** REDIRECT TO PILOT URL TRACE ENDS ****");
+
+        String sRemoteUser = req.getRemoteUser() != null ? req.getRemoteUser() : "UNKNOWN";
+        log.info("Redirecting user {} to {}", sRemoteUser, pilotUrl);
+
+        resp.sendRedirect(pilotUrl);
+    }
+✅ Steps to Run Lombok JAR with STS/Eclipse
+
+Agar nahi detect karta:
+
+Click Specify location...
+
+Browse karo aur STS installation folder select karo, e.g.:
+
+makefile
+Copy code
+C:\sts-4.21.0.RELEASE
+(yahan SpringToolSuite4.ini file honi chahiye).
+
+Install/Update Button Dabao
+
+Installer -javaagent:lombok.jar line automatically add karega tumhare SpringToolSuite4.ini file mein.
+
+Matlab STS start hote hi Lombok agent load hoga.
+
+STS Restart karo
+
+Restart ke baad @Getter, @Setter, @Data, @RequiredArgsConstructor sab annotations STS ke liye recognizable ho jayenge.
+
+Red underline hata jayega aur autocomplete bhi aa jayega.
+
+🔑 Verify Installation
+Ek test class banao:
+
+java
+Copy code
+import lombok.Data;
+
+@Data
+public class TestLombok {
+    private String name;
+}
+Ab TestLombok test = new TestLombok(); likho
+
+Agar test.getName() / test.setName("ABC") likhne pe koi red error nahi aata → ✅ Lombok STS mein successfully enabled hai.
+
+👉 Tumhari Lombok dependency (Maven/Gradle) build mein already honi chahiye.
+IDE mein sirf .ini integration hi missing thi, jo ab ho jayegi.
+
+Bhai, kya tum chahte ho main tumhe STS ke .ini file ka sample dikhau jisme Lombok agent entry hoti hai, taaki tum manually bhi check kar sako?
+
+
+
+
+
+
+
+
+
+
+
+
+
+ChatGPT can make mistakes. Check important info. See Cookie Preferences.
