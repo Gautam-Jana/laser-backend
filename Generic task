@@ -1,0 +1,295 @@
+import React, { useState, useRef } from 'react';
+import { 
+  SdfBox, 
+  SdfButton, 
+  SdfCard, 
+  SdfFileUploader, 
+  SdfFocusPane, 
+  SdfTextarea 
+} from '@waypoint/react-components';
+
+interface FormData {
+  description: string;
+  controlCard: string;
+  data: string;
+}
+
+function Main(): JSX.Element {
+  const [formData, setFormData] = useState<FormData>({
+    description: '',
+    controlCard: '',
+    data: ''
+  });
+  const [errors, setErrors] = useState<Partial<FormData>>({});
+  const [isHelpPaneOpen, setIsHelpPaneOpen] = useState(false);
+  const fileUploaderRef = useRef<HTMLInputElement>(null);
+
+  const handleInputChange = (field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear error when user types
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: Partial<FormData> = {};
+    
+    if (!formData.description.trim()) {
+      newErrors.description = 'Description is required';
+    }
+    
+    if (!formData.controlCard.trim() && !formData.data.trim()) {
+      newErrors.controlCard = 'Either Control Card or Data must be provided';
+      newErrors.data = 'Either Control Card or Data must be provided';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleExport = () => {
+    if (!validateForm()) return;
+    
+    // Create a blob and download the file
+    const content = JSON.stringify(formData, null, 2);
+    const blob = new Blob([content], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'generic-task-export.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    alert('File exported successfully!');
+  };
+
+  const handleSaveAs = () => {
+    if (!validateForm()) return;
+    
+    // In a real application, this would save to the server
+    alert('Data saved to PWF server successfully!');
+  };
+
+  const handleNext = () => {
+    if (!validateForm()) return;
+    
+    // Proceed to the next step
+    alert('Moving to Job Ticket screen...');
+  };
+
+  const handleCancel = () => {
+    setFormData({ description: '', controlCard: '', data: '' });
+    setErrors({});
+  };
+
+  const handleClear = () => {
+    setFormData({ description: '', controlCard: '', data: '' });
+    setErrors({});
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      // Simple check for file type based on extension
+      if (file.name.endsWith('.pmfx')) {
+        handleInputChange('controlCard', content);
+      } else if (file.name.endsWith('.pmfi')) {
+        handleInputChange('data', content);
+      } else {
+        alert('Unsupported file type. Please upload a .pmfx or .pmfi file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleControlClick = () => {
+    fileUploaderRef.current?.click();
+  };
+
+  const handleDataClick = () => {
+    fileUploaderRef.current?.click();
+  };
+
+  return (
+    <div className="p-4">
+      <SdfBox>
+        <span className="font-black text-xl">Generic Task // Procedures</span>
+        <section className="flex items-end justify-end">
+          <SdfButton 
+            id="focus-pane-demo-open-button" 
+            onClick={() => setIsHelpPaneOpen(true)}
+          >
+            Help
+          </SdfButton>
+          <SdfFocusPane
+            dismiss-label="Cancel"
+            accept-label="Next"
+            closeable={true}
+            spacing="normal"
+            heading="About the Generic Task"
+            id="demo-component"
+            status="success"
+            visible={isHelpPaneOpen}
+            onDismiss={() => setIsHelpPaneOpen(false)}
+            onAccept={() => setIsHelpPaneOpen(false)}
+          >
+            <SdfBox variants="underlined">
+              <div>
+                <div>February 2015</div>
+                <div className="mt-2">
+                  Use the Generic Task screen (Task 00001) when you want to use saved Input files to create Control Cards or Data Files that contain a lot of information.
+                </div>
+                <div className="mt-4">
+                  When you initiate and submit a mainframe job from a Generic Task, request data is sent to the mainframe where it joins a request queue to await processing. When the job has finished processing, you are notified that the job&#39;s output is available.
+                </div>
+              </div>
+            </SdfBox>
+
+            <h4 className="mt-5 mb-0">Use the generic task</h4>
+            <div className="mt-0">
+              <SdfBox className="mt-0" header="Primary Beneficiaries" variants="clear">
+                <div>1. Click Generic Task.</div>
+                <div className="mt-6">2. Enter a Description.</div>
+                <div className="mt-6">
+                  <div className="mt-4">3. Add Control Card and/or Data file details in one of these ways:</div>
+                  <div className="mt-2">Click on Import to access and select a saved .pmfx or .pmfifile.</div>
+                  <div className="mt-2">
+                    Drag and drop a saved .pmfx or .pmfifile from your hard drive onto the Control and/or Data icons.
+                  </div>
+                  <div className="mt-2">Manually enter details in the Control Card and/or Data fields.</div>
+                </div>
+                <div className="mt-6">
+                  <div className="mt-4">
+                    4. If you want to save the task information you&#39;ve just entered and store it on your local drive so that you can access it later for re-use, click Export, enter the File Name on the Data Export pop-up window, and then click Export.
+                  </div>
+                  <div className="mt-1">
+                    If you want to save the task information you&#39;ve just entered and store it on the PWF server so that anyone can access it later for re-use, click Save As, enter the File Name and assign the file to a Shared File Group on the Save pop-up window, and then click Save.
+                  </div>
+                </div>
+                <div>
+                  5. Click Next to move on to the Job Ticket screen where you add details about how to run the job. The Description, Priority, Control Card and/or Date File fields are automatically populated and can be edited. Enter a Procedure name. If changing the job priority, enter any number between 2 and 9, with 2 being the most urgent priority. Priority can be any number between 1 and 9, but only PWF Admins are allowed to enter a 1. They do so on the Job Monitor, not on the Job Ticket.
+                </div>
+                <div className="mt-2">
+                  6. Enter a time by when the job should be complete in 24-hour format (for instance, 0230, which is 2190 AW).
+                </div>
+                <div className="mt-2">
+                  7. Provide special instructions for Operations for output delivery, or run instructions if necessary.
+                </div>
+                <div className="mt-2">
+                  8. If you want to direct the job&#39;s output: *Select Computer Room to send it to the computer room printer. *Select User to send it back to your printer. *Select Network to send it to a local automatic printer.
+                </div>
+                <div className="mt-2">
+                  9. Click Next and then Yes in the pop-up job ticket window. PMF sends all entered information to the mainframe for processing and adds the job to the Job Status list on your Dashboard where you can monitor its processing.
+                </div>
+              </SdfBox>
+            </div>
+          </SdfFocusPane>
+        </section>
+      </SdfBox>
+      
+      <div className="mt-8">
+        <SdfBox>
+          <div className="flex justify-between items-center">
+            <div>
+              <input 
+                type="file" 
+                ref={fileUploaderRef} 
+                onChange={handleFileUpload} 
+                accept=".pmfx,.pmfi" 
+                className="hidden" 
+              />
+              <SdfFileUploader onClick={() => fileUploaderRef.current?.click()} />
+            </div>
+            <div className="flex flex-col items-end">
+              <div className="flex gap-2">
+                <SdfButton icon="action-upload" onClick={handleExport}>
+                  Export
+                </SdfButton>
+                <SdfButton icon="action-save" onClick={handleSaveAs}>
+                  Save As
+                </SdfButton>
+              </div>
+              <div className="mt-4">
+                <span className="font-black">AutoSave Is Not Available</span>
+              </div>
+            </div>
+          </div>
+        </SdfBox>
+        
+        <SdfCard className="mt-4">
+          <div className="flex gap-4">
+            <SdfButton onClick={handleControlClick}>Control</SdfButton>
+            <SdfButton onClick={handleDataClick}>Data</SdfButton>
+          </div>
+        </SdfCard>
+        
+        <div className="mt-4">
+          <SdfTextarea 
+            label="Description" 
+            resize="none" 
+            rows={3}
+            state={errors.description ? 'error' : 'normal'}
+            value={formData.description}
+            placeholder="Enter task description"
+            onChange={(e) => handleInputChange('description', e.target.value)}
+          />
+          {errors.description && (
+            <div className="text-red-500 text-sm mt-1">{errors.description}</div>
+          )}
+        </div>
+        
+        <div className="mt-4">
+          <SdfTextarea 
+            label="Control Card" 
+            resize="vertical" 
+            rows={4}
+            state={errors.controlCard ? 'error' : 'normal'}
+            value={formData.controlCard}
+            placeholder="Enter control card details or import from file"
+            onChange={(e) => handleInputChange('controlCard', e.target.value)}
+          />
+          {errors.controlCard && (
+            <div className="text-red-500 text-sm mt-1">{errors.controlCard}</div>
+          )}
+        </div>
+        
+        <div className="mt-4">
+          <SdfTextarea 
+            label="Data" 
+            resize="vertical" 
+            rows={6}
+            state={errors.data ? 'error' : 'normal'}
+            value={formData.data}
+            placeholder="Enter data or import from file"
+            onChange={(e) => handleInputChange('data', e.target.value)}
+          />
+          {errors.data && (
+            <div className="text-red-500 text-sm mt-1">{errors.data}</div>
+          )}
+        </div>
+        
+        <div className="flex gap-4 mt-8 justify-center">
+          <SdfButton icon="nav-page-next" active={true} onClick={handleNext}>
+            Next
+          </SdfButton>
+          <SdfButton icon="action-refresh" onClick={handleCancel}>
+            Cancel
+          </SdfButton>
+          <SdfButton icon="action-close" onClick={handleClear}>
+            Clear
+          </SdfButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Main;
