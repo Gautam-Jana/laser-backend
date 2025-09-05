@@ -1,0 +1,111 @@
+package com.adip.autopsy.lsfadmin;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import javax.servlet.ServletException;
+import java.io.IOException;
+
+@Slf4j
+@Controller
+@RequestMapping("/AuditProcessor")
+@RequiredArgsConstructor
+public class AuditProcessorController {
+
+    private final BaseLsfAdminController baseController;
+    private final AuditService auditService;
+
+    @GetMapping
+    public void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        doPost(req, resp);
+    }
+
+    @PostMapping
+    public void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String sRegion = req.getParameter("region");
+        log.info("region: {}", sRegion);
+
+        if (sRegion == null) {
+            baseController.sessionTimeout(req, resp);
+            return;
+        }
+
+        String sCciSecurityBeanSessionAttributeName = sRegion + "CciSecurityBean";
+        String sLsfAdminDataBeanSessionAttributeName = sRegion + "lsfAdminDataBean";
+
+        HttpSession httpSession = req.getSession(false);
+
+        if (httpSession == null) {
+            baseController.sessionTimeout(req, resp);
+            return;
+        }
+
+        CciSecurityBean cciSecurityBean = (CciSecurityBean) httpSession.getAttribute(sCciSecurityBeanSessionAttributeName);
+        lsfAdminDataBean lsfAdminDataBean = (lsfAdminDataBean) httpSession.getAttribute(sLsfAdminDataBeanSessionAttributeName);
+
+        if ((cciSecurityBean == null) || (lsfAdminDataBean == null)) {
+            baseController.sessionTimeout(req, resp);
+            return;
+        }
+
+        String sCommand = req.getParameter("command");
+
+        if ((sCommand == null) || (sCommand.equalsIgnoreCase("AUDIT")) || 
+            (lsfAdminDataBean.getIMode() == lsfAdminDataBean.LSF_MODE_PRINTJOBS)) {
+            auditService.initialEntry(req, resp, lsfAdminDataBean);
+            return;
+        }
+
+        if (lsfAdminDataBean.getIMode() != lsfAdminDataBean.LSF_MODE_AUDIT) {
+            baseController.sendFatalError(req, resp, "Session Timed Out", "", "", "", "", true);
+            return;
+        }
+
+        String sPrintListOfSelected = req.getParameter("btnPrintListOfSelected");
+
+        if (sPrintListOfSelected != null) {
+            lsfAdminDataBean.setIViewReportsSelectionAction(lsfAdminDataBean.LSF_LIST_PRINT);
+            baseController.lsfForward(req, resp, "/SelectionActionProcessor");
+            return;
+        }
+
+        String sPage = req.getParameter("page");
+
+        if (sPage == null) {
+            baseController.sessionTimeout(req, resp);
+            return;
+        }
+
+        if (sPage.equalsIgnoreCase("LSFRS")) {
+            baseController.lsfForward(req, resp, "/lsfrsProcessor");
+            return;
+        }
+
+        if (sPage.equalsIgnoreCase("PREV")) {
+            auditService.goToPrevPage(req, resp, lsfAdminDataBean);
+            return;
+        }
+
+        if (sPage.equalsIgnoreCase("NEXT")) {
+            auditService.goToNextPage(req, resp, lsfAdminDataBean);
+            return;
+        }
+
+        int iPage = 0;
+
+        try {
+            iPage = Integer.parseInt(sPage);
+        } catch (NumberFormatException e) {
+            iPage = 1;
+        }
+
+        auditService.goToPage(req, resp, lsfAdminDataBean, iPage);
+    }
+}
