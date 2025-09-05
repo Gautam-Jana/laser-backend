@@ -1,0 +1,352 @@
+package com.adip.autopsy.lsfadmin;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import javax.servlet.ServletException;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.util.Date;
+
+@Controller
+@RequestMapping("/LsfAdminController")
+public class LsfAdminController {
+
+    private static final long serialVersionUID = -6534126465116248882L;
+    private static final Logger logger = LoggerFactory.getLogger(LsfAdminController.class);
+
+    @GetMapping
+    public void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        doPost(req, resp);
+    }
+
+    @PostMapping
+    public void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        resp.setHeader("Pragma", "no-cache");
+        resp.setDateHeader("Expires", 0);
+
+        String sCommand = req.getParameter("command");
+        String sRegion = req.getParameter("region");
+
+        if (sCommand == null) {
+            lsfAdminDataBean lsfAdminDataBean1 = null;
+            HttpSession httpsession1 = req.getSession(false);
+
+            if (httpsession1 != null) {
+                removeSessionAttributes(httpsession1, sRegion);
+            }
+
+            lsfAdminDataBean1 = new lsfAdminDataBean();
+            lsfAdminDataBean1.setSContextPath(req.getContextPath());
+            lsfAdminDataBean1.setSPathInfo(req.getPathInfo());
+
+            String sRequestURL = req.getRequestURL().toString();
+            if (sRequestURL.toLowerCase().contains("agp.com")) {
+                lsfAdminDataBean1.setSRequestURL(sRequestURL.replaceAll(":\\d{1,4}/", "/"));
+            } else {
+                lsfAdminDataBean1.setSRequestURL(sRequestURL);
+            }
+
+            String sRemoteUser = req.getRemoteUser();
+            if (sRemoteUser == null) {
+                sRemoteUser = "UNKNOWN";
+            }
+            lsfAdminDataBean1.setSRemoteUser(sRemoteUser);
+            lsfAdminDataBean1.setSDDSchema(sRegion);
+
+            req.setAttribute("lsfAdminDataBean", lsfAdminDataBean1);
+            lsfForward(req, resp, "/lsfrsProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("INITLSFRS")) {
+            lsfForward(req, resp, "/lsfrsProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("LSFRS")) {
+            lsfForward(req, resp, "/lsfrsProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("LOGIN")) {
+            lsfForward(req, resp, "/LoginProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("LOGOFF")) {
+            logoff(req, resp, sRegion);
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("INITSELECTION")) {
+            lsfForward(req, resp, "/SelectionProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("SELECTION")) {
+            lsfForward(req, resp, "/SelectionProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("SELECTIONACTION")) {
+            lsfForward(req, resp, "/SelectionActionProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("PRINTJOBS")) {
+            lsfForward(req, resp, "/PrintJobProcessor");
+            return;
+        }
+
+        if (sCommand.equalsIgnoreCase("INTERPRINTJOBS")) {
+            lsfForward(req, resp, "/PrintJobProcessor");
+            return;
+        }
+    }
+
+    protected void lsfForward(HttpServletRequest req, HttpServletResponse resp, String sResourcePath) throws ServletException, IOException {
+        ServletContext scContext = req.getServletContext();
+        RequestDispatcher rdDispatcher = scContext.getRequestDispatcher(sResourcePath);
+        rdDispatcher.forward(req, resp);
+    }
+
+    protected void logoff(HttpServletRequest req, HttpServletResponse resp, String sRegion) throws ServletException, IOException {
+        HttpSession httpsession1 = req.getSession(false);
+
+        if (httpsession1 == null) {
+            sessionTimeout(req, resp);
+            return;
+        }
+
+        String slsfAdminDataBeanSessionAttributeName = sRegion + "lsfAdminDataBean";
+        lsfAdminDataBean lsfAdminDataBean1 = (lsfAdminDataBean) httpsession1.getAttribute(slsfAdminDataBeanSessionAttributeName);
+
+        if (lsfAdminDataBean1 == null) {
+            sessionTimeout(req, resp);
+            return;
+        }
+
+        req.setAttribute("lsfAdminDataBean", lsfAdminDataBean1);
+        removeSessionAttributes(httpsession1, sRegion);
+        lsfForward(req, resp, "/logoff");
+    }
+
+    protected void sessionTimeout(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        sendFatalError(req, resp, "Session Timed Out", "", "", "", "", false);
+    }
+
+    protected void sendFatalError(HttpServletRequest req, HttpServletResponse resp, String sErrorMessage,
+                                 String sFatalErrorMessage1, String sFatalErrorMessage2, String sFatalErrorMessage3,
+                                 String sFatalErrorMessage4, boolean bKesSession) throws ServletException, IOException {
+        String sRegion = req.getParameter("region");
+        lsfAdminDataBean lsfAdminDataBean1 = null;
+
+        if (sRegion != null) {
+            String slsfAdminDataBeanSessionAttributeName = sRegion + "lsfAdminDataBean";
+            HttpSession httpsession1 = req.getSession(false);
+
+            if (httpsession1 != null) {
+                lsfAdminDataBean1 = (lsfAdminDataBean) httpsession1.getAttribute(slsfAdminDataBeanSessionAttributeName);
+                if (!bKesSession) {
+                    removeSessionAttributes(httpsession1, sRegion);
+                }
+            }
+        }
+
+        if (lsfAdminDataBean1 == null) {
+            lsfAdminDataBean1 = new lsfAdminDataBean();
+        }
+
+        String sRemoteUser = req.getRemoteUser();
+        if (sRemoteUser == null) {
+            sRemoteUser = "UNKNOWN";
+        }
+
+        lsfAdminDataBean1.setSRemoteUser(sRemoteUser);
+        lsfAdminDataBean1.setSUserId("UNKNOWN");
+        lsfAdminDataBean1.setSErrorMessage(sErrorMessage);
+        lsfAdminDataBean1.setSFatalErrorMessage1(sFatalErrorMessage1);
+        lsfAdminDataBean1.setSFatalErrorMessage2(sFatalErrorMessage2);
+        lsfAdminDataBean1.setSFatalErrorMessage3(sFatalErrorMessage3);
+        lsfAdminDataBean1.setSFatalErrorMessage4(sFatalErrorMessage4);
+        lsfAdminDataBean1.setSContextPath(req.getContextPath());
+
+        req.setAttribute("lsfAdminDataBean", lsfAdminDataBean1);
+
+        logger.info(sErrorMessage + " " + sFatalErrorMessage1 + " " + sFatalErrorMessage2 + " " + sFatalErrorMessage3 + " " + sFatalErrorMessage4);
+
+        lsfForward(req, resp, "/lsfreserror");
+    }
+
+    protected void removeSessionAttributes(HttpSession httpsession1, String sRegion) {
+        if ((httpsession1 != null) && (sRegion != null)) {
+            String sCciSecurityBeanSessionAttributeName = sRegion + "CciSecurityBean";
+            String sLsfAdminDataBeanSessionAttributeName = sRegion + "lsfAdminDataBean";
+            String sLsffastReportNamesBeanSessionAttributeName = sRegion + "LsffastReportNamesBean";
+
+            httpsession1.removeAttribute(sCciSecurityBeanSessionAttributeName);
+            httpsession1.removeAttribute(sLsfAdminDataBeanSessionAttributeName);
+            httpsession1.removeAttribute(sLsffastReportNamesBeanSessionAttributeName);
+        }
+    }
+
+    protected String stripInvalidCharacters(String string) {
+        final char backSlash = '\\';
+        final char tickMark = '\'';
+        final char quotMark = '\"';
+        final char leftCaret = '<';
+        final char rightCaret = '>';
+
+        char chars[] = string.toCharArray();
+        StringBuffer sb = new StringBuffer();
+
+        for (int i = 0; i < chars.length; i++) {
+            switch (chars[i]) {
+                case backSlash:
+                    break;
+                case tickMark:
+                    break;
+                case quotMark:
+                    break;
+                case leftCaret:
+                    break;
+                case rightCaret:
+                    break;
+                default:
+                    sb.append(chars[i]);
+                    break;
+            }
+        }
+        return sb.toString();
+    }
+
+    protected String fixParametersSpaces(String sIn) {
+        char[] chars = sIn.toCharArray();
+        StringBuffer sbOut = new StringBuffer();
+
+        for (int i = 0; i < chars.length; i++) {
+            switch (chars[i]) {
+                case 0x00A0:
+                    sbOut.append(' ');
+                    break;
+                default:
+                    sbOut.append(chars[i]);
+            }
+        }
+        return sbOut.toString();
+    }
+
+    protected String parseDbName(String sPathInfo) {
+        int iSlashPos = sPathInfo.indexOf("/", 1);
+        if (iSlashPos > 0) {
+            return sPathInfo.substring(1, iSlashPos);
+        }
+        int iLength = sPathInfo.length();
+        if (iLength > 1) {
+            return sPathInfo.substring(1);
+        }
+        return "";
+    }
+
+    protected String parseDbSchema(String sPathInfo) {
+        int iSlashPos = sPathInfo.indexOf("/", 1);
+        int iLength = sPathInfo.length();
+        if ((iSlashPos < iLength - 1) && (iSlashPos > 0)) {
+            String sTemp = sPathInfo.substring(iSlashPos);
+            return parseDbName(sTemp);
+        }
+        return "";
+    }
+
+    protected String parseRegionFromUrl(String sPathInfo) {
+        String sRegion = "";
+        if ((sPathInfo != null) && (sPathInfo.length() > 0)) {
+            String sTemp = parseDbSchema(sPathInfo);
+            if (sTemp.length() > 0) {
+                sRegion = sTemp.toUpperCase();
+            }
+        }
+        return sRegion;
+    }
+
+    public static String getDateTime() {
+        Date currentDate = new Date();
+        return DateFormat.getDateTimeInstance().format(currentDate);
+    }
+
+    protected String getDbName() {
+        // This would typically be from configuration in Spring Boot
+        // For now, return a default or get from environment
+        return System.getProperty("dbname", "defaultDbName");
+    }
+
+    protected String getDbSchema() {
+        return System.getProperty("dbSchema", "defaultDbSchema");
+    }
+
+    protected String getVersion() {
+        return System.getProperty("version", "1.0");
+    }
+
+    protected boolean getTrace() {
+        String sTrace = System.getProperty("trace", "false");
+        return sTrace.equalsIgnoreCase("true");
+    }
+
+    protected boolean getUsesingleDataSource() {
+        String sUsesingleDataSource = System.getProperty("usesingleDataSource", "false");
+        return sUsesingleDataSource.equalsIgnoreCase("true");
+    }
+
+    protected boolean getTraceUser() {
+        String sTraceUser = System.getProperty("traceuser", "false");
+        return sTraceUser.equalsIgnoreCase("true");
+    }
+
+    protected boolean getUseC1Security() {
+        String sUseC1Security = System.getProperty("usec1security", "true");
+        return !sUseC1Security.equalsIgnoreCase("false");
+    }
+
+    protected boolean getCheckRfcVersion() {
+        String sCheckRfcVersion = System.getProperty("checkrfcversion", "true");
+        return !sCheckRfcVersion.equalsIgnoreCase("false");
+    }
+
+    protected String getRfcVersion() {
+        return System.getProperty("rfcversion", "1.0");
+    }
+
+    protected int getLinesPerPage() {
+        String sLinesPerPage = System.getProperty("linesperpage", "10");
+        try {
+            return Integer.parseInt(sLinesPerPage);
+        } catch (NumberFormatException e) {
+            return 10;
+        }
+    }
+
+    protected void getParameters(lsfAdminDataBean lsfAdminDataBean1) {
+        lsfAdminDataBean1.setSDBSchema(getDbSchema());
+        lsfAdminDataBean1.setBUsesingleDataSource(getUsesingleDataSource());
+        lsfAdminDataBean1.setBTrace(getTrace());
+        lsfAdminDataBean1.setILinesPerPage(getLinesPerPage());
+        lsfAdminDataBean1.setSDDName(getDbName());
+        lsfAdminDataBean1.setSLocalDbName(getDbName());
+        lsfAdminDataBean1.setSVersion(getVersion());
+        lsfAdminDataBean1.setBTraceUser(getTraceUser());
+        lsfAdminDataBean1.setBUseC1Security(getUseC1Security());
+        lsfAdminDataBean1.setBCheckRfcVersion(getCheckRfcVersion());
+        lsfAdminDataBean1.setSRfcVersion(getRfcVersion());
+    }
+}
