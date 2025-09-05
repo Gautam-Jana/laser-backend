@@ -1,0 +1,155 @@
+package com.adip.autopsy.lsfadmin;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.ServletException;
+import java.io.IOException;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuditService {
+
+    private final BaseLsfAdminController baseController;
+
+    public void initialEntry(HttpServletRequest req, HttpServletResponse resp, lsfAdminDataBean lsfAdminDataBean) throws ServletException, IOException {
+        if (lsfAdminDataBean.getIViewReportsSelectionAction() == lsfAdminDataBean.LSF_LIST_PRINT_DONE) {
+            lsfAdminDataBean.setIViewReportsSelectionAction(lsfAdminDataBean.LSF_NO_ACTION);
+            lsfAdminDataBase lsfAdminDataBase = new lsfAdminDataBase();
+            goToSavePage(req, resp, lsfAdminDataBean, lsfAdminDataBase);
+            return;
+        }
+        
+        lsfAdminDataBean.setIMode(lsfAdminDataBean.LSF_MODE_AUDIT);
+        firstPage(req, resp, lsfAdminDataBean);
+    }
+
+    public void firstPage(HttpServletRequest req, HttpServletResponse resp, lsfAdminDataBean lsfAdminDataBean) throws ServletException, IOException {
+        lsfAdminDataBean.clearMessagesAndFlags();
+        lsfAdminDataBase lsfAdminDataBase = new lsfAdminDataBase();
+
+        try {
+            lsfAdminDataBean.setILowPageLink(1);
+            lsfAdminDataBase.fillReportsBuffer(lsfAdminDataBean, new lsfRow(), 'R', "");
+        } catch (lsfAdminException e) {
+            baseController.sendFatalError(req, resp, e.getMessage(), e.getSErrorMessage1(), e.getSErrorMessage2(),
+                    e.getSErrorMessage3(), e.getSErrorMessage4(), false);
+            return;
+        }
+
+        lsfAdminDataBean.clearLowPageFirstRows();
+        lsfAdminDataBean.setBReportSelected(true);
+        goToPage(req, resp, lsfAdminDataBean, 1);
+    }
+
+    public void goToPage(HttpServletRequest req, HttpServletResponse resp, lsfAdminDataBean lsfAdminDataBean, int iPage) throws ServletException, IOException {
+        int iGotoPage = iPage;
+        if (iPage < lsfAdminDataBean.getILowPageLink()) {
+            iGotoPage = lsfAdminDataBean.getILowPageLink();
+        }
+
+        if (lsfAdminDataBean.getILowPageLink() > lsfAdminDataBean.LSF_MAX_PAGE_LINKS) {
+            lsfAdminDataBean.setILowPageLink(lsfAdminDataBean.getILowPageLink() - lsfAdminDataBean.LSF_MAX_PAGE_LINKS);
+        }
+
+        lsfAdminDataBean.setILowPageLink(1);
+
+        try {
+            lsfAdminDataBean.fillReportsBuffer(lsfAdminDataBean, lsfAdminDataBean.getILowPageFirstRow(), "R", "");
+        } catch (lsfAdminException e) {
+            baseController.sendFatalError(req, resp, e.getMessage(), e.getSErrorMessage1(), e.getSErrorMessage2(),
+                    e.getSErrorMessage3(), e.getSErrorMessage4(), false);
+            return;
+        }
+
+        if ((lsfAdminDataBean.getBLastBuffer()) || (lsfAdminDataBean.getICurrentPage() < lsfAdminDataBean.getIHighPageLink())) {
+            lsfAdminDataBean.setBNextLink(true);
+        } else {
+            lsfAdminDataBean.setBNextLink(false);
+        }
+
+        if (lsfAdminDataBean.getITotalRowCount() < 1) {
+            lsfAdminDataBean.setSErrorMessage("No data found");
+        } else {
+            lsfAdminDataBean.setSErrorMessage("");
+        }
+
+        req.setAttribute("lsfAdminDataBean", lsfAdminDataBean);
+        baseController.lsfForward(req, resp, "/lsfaudit");
+    }
+
+    public void goToPrevPage(HttpServletRequest req, HttpServletResponse resp, lsfAdminDataBean lsfAdminDataBean) throws ServletException, IOException {
+        if (lsfAdminDataBean.getICurrentPage() > lsfAdminDataBean.getILowPageLink()) {
+            goToPage(req, resp, lsfAdminDataBean, lsfAdminDataBean.getICurrentPage() - 1);
+            return;
+        }
+
+        if (lsfAdminDataBean.getICurrentPage() == 1) {
+            goToPage(req, resp, lsfAdminDataBean, 1);
+            return;
+        }
+    }
+
+    public void goToNextPage(HttpServletRequest req, HttpServletResponse resp, lsfAdminDataBean lsfAdminDataBean) throws ServletException, IOException {
+        if (lsfAdminDataBean.getICurrentPage() < lsfAdminDataBean.getIHighPageLink()) {
+            goToPage(req, resp, lsfAdminDataBean, lsfAdminDataBean.getICurrentPage() + 1);
+            return;
+        }
+
+        if (lsfAdminDataBean.getICurrentPage() % lsfAdminDataBean.LSF_MAX_PAGE_LINKS > 0) {
+            goToPage(req, resp, lsfAdminDataBean, lsfAdminDataBean.getICurrentPage());
+            return;
+        }
+
+        lsfAdminDataBean.saveFirstRow();
+        lsfRow lsfRowSave = lsfAdminDataBean.getHighestLsFRow();
+        lsfAdminDataBean.clearlsfRows();
+
+        lsfAdminDataBase lsfAdminDataBase = new lsfAdminDataBase();
+
+        try {
+            lsfAdminDataBean.setILowPageLink(lsfAdminDataBean.getIHighPageLink() + 1);
+            lsfAdminDataBase.fillReportsBuffer(lsfAdminDataBean, lsfRowSave, "R", "");
+        } catch (lsfAdminException e) {
+            baseController.sendFatalError(req, resp, e.getMessage(), e.getSErrorMessage1(), e.getSErrorMessage2(),
+                    e.getSErrorMessage3(), e.getSErrorMessage4(), false);
+            return;
+        }
+
+        goToPage(req, resp, lsfAdminDataBean, lsfAdminDataBean.getILowPageLink());
+    }
+
+    public void goToSavePage(HttpServletRequest req, HttpServletResponse resp, 
+                           lsfAdminDataBean lsfAdminDataBean, lsfAdminDataBase lsfAdminDataBase) throws ServletException, IOException {
+        if ((lsfAdminDataBean.getISaveCurrentPage() > lsfAdminDataBean.getIHighPageLink()) && 
+            (lsfAdminDataBean.getBNextLink())) {
+            lsfAdminDataBean.clearLowPageFirstRows();
+        }
+
+        while ((lsfAdminDataBean.getISaveCurrentPage() > lsfAdminDataBean.getIHighPageLink()) && 
+               (lsfAdminDataBean.getBNextLink())) {
+            lsfAdminDataBean.saveFirstRow();
+            lsfRow lsfRowSave = lsfAdminDataBean.getHighestLsFRow();
+            lsfAdminDataBean.clearlsfRows();
+
+            try {
+                lsfAdminDataBean.setILowPageLink(lsfAdminDataBean.getIHighPageLink() + 1);
+                lsfAdminDataBase.fillReportsBuffer(lsfAdminDataBean, lsfRowSave, "R", "");
+            } catch (lsfAdminException e) {
+                baseController.sendFatalError(req, resp, e.getMessage(), e.getSErrorMessage1(), e.getSErrorMessage2(),
+                        e.getSErrorMessage3(), e.getSErrorMessage4(), false);
+                return;
+            }
+        }
+
+        if (lsfAdminDataBean.getISaveCurrentPage() > lsfAdminDataBean.getIHighPageLink()) {
+            goToPage(req, resp, lsfAdminDataBean, lsfAdminDataBean.getIHighPageLink());
+        } else {
+            goToPage(req, resp, lsfAdminDataBean, lsfAdminDataBean.getISaveCurrentPage());
+        }
+    }
+}
